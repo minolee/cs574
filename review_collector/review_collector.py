@@ -19,7 +19,9 @@ def get_naver_movie_review(movie_code):
 		n = NaverHTMLParser()
 		page = n.getReview(data.read().decode("utf8"))
 		if len(last) > 0 and last[-1] == page[-1]: break
+		if len(page) == 0: break
 		for item in page:
+			if len(item) == 0: continue
 			yield item
 		page_count += 1
 		last = page
@@ -35,8 +37,10 @@ def get_daum_movie_review(movie_code):
 			break
 		n = DaumHTMLParser()
 		page = n.getReview(data.read().decode("utf8"))
-		if len(last) > 0 and last[-1] == page[-1]: break
+		if len(last) > 0 and last == page: break
+		if len(page) == 0: break
 		for item in page:
+			if len(item) == 0: continue
 			yield item
 		page_count += 1
 		last = page
@@ -89,13 +93,16 @@ class DaumHTMLParser(MovieHTMLParser):
 
 	def handle_data(self, data):
 		if self.parseMode == 1:
-			self.reviews.append(data.strip())
+			self.reviews.append(" ".join(data.strip().split("\n")))
 	def handle_endtag(self, tag):
 		self.parseMode = 0
 
 if __name__ == '__main__':
+	f = open("daum_%s.txt" % "레디 플레이어 원","w", encoding="UTF8")
+
 	for review in get_daum_movie_review(96030):
-		print(review)
+		f.write(review+"\n")
+	f.close()
 	# codes = open("naver_moviecode", "r", encoding="UTF8")
 	# for line in codes.readlines():
 	# 	movie_name, movie_code = line.strip().split(",")
