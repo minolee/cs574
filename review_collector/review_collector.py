@@ -31,7 +31,7 @@ def default_end_function(page, lastdata):
 
 def getNaverMovieReview(movie_code, longdata=False, print_page=False):
 	short_url = "https://movie.naver.com/movie/bi/mi/pointWriteFormList.nhn?code=%d&type=after&isActualPointWriteExecute=false&isMileageSubscriptionAlready=false&isMileageSubscriptionReject=false&page=%d"
-	long_url = "https://movie.naver.com/movie/bi/mi/review.nhn?code=%d&order=newest&page=%d"
+	long_url = "https://movie.naver.com/movie/bi/mi/review.nhn?code=%d&page=%d"
 
 	if not longdata:
 		url = short_url
@@ -125,15 +125,16 @@ class NaverLongMovieListParser(MovieHTMLParser):
 		self.movie_code = movie_code
 	def getReview(self, html):
 		self.reviews = []
-		self.reviewLinkCodes = []
+		self.reviewLinkCodes = set()
 		self.feed(html)
 		p = NaverLongReviewParser()
 		for item in self.reviewLinkCodes:
-			url = "https://movie.naver.com/movie/bi/mi/reviewread.nhn?nid=%d&code=%d&order=newest#tab" % (item, self.movie_code)
+			url = "https://movie.naver.com/movie/bi/mi/reviewread.nhn?nid=%d&code=%d&order=#tab" % (item, self.movie_code)
 			data = urllib.request.urlopen(url).read().decode("utf8")
 			self.reviews.append(p.getReview(data))
-		print(self.reviews)
+		# print(self.reviews)
 		return self.reviews
+
 	def handle_starttag(self, tag, attrs):
 		if tag == "ul" and ("class", "rvw_list_area") in attrs:
 			self.parseMode = 1
@@ -141,10 +142,13 @@ class NaverLongMovieListParser(MovieHTMLParser):
 			for item in attrs:
 				if item[0] == "onclick" and "showReviewDetail" in item[1]:
 					# print(item[1])
-					self.reviewLinkCodes.append(int("".join(re.findall("\d", item[1]))))
+					self.reviewLinkCodes.add(int("".join(re.findall("\d", item[1]))))
 					# print(len(self.reviewLinkCodes))
+	# def handle_data(self, data):
+	# 	if self.parseMode == 1:
+	# 		print(data)
 	def handle_endtag(self, tag):
-		if tag == "div":
+		if tag == "ul":
 			self.parseMode = 0
 
 
@@ -154,7 +158,7 @@ class NaverLongReviewParser(MovieHTMLParser):
 		# print(html)
 		self.feed(html)
 		r = "\n".join(self.review)
-		#print(r)
+		# print(r)
 		return r
 	def handle_starttag(self, tag, attrs):
 		if tag == "div" and ("class", "user_tx_area") in attrs:
@@ -163,10 +167,20 @@ class NaverLongReviewParser(MovieHTMLParser):
 			self.parseMode = 10
 	def handle_data(self, data):
 		if self.parseMode == 10:
-			self.review.append(data.replace("&nbsp", " "))
+			d = self.postprocess(data)
+			# print(len(d))
+			if len(d) > 1:
+				self.review.append(d)
 	def handle_endtag(self, tag):
 		if tag == "div":
 			self.parseMode = 0
+
+	def postprocess(self, reviewText):
+		d = reviewText
+		d = d.replace("&nbsp", " ")
+		d = d.replace("\\xa0", " ")
+		d = re.sub(r"(\\n|\\r)+", "\n", d)
+		return d
 
 
 class DaumHTMLParser(MovieHTMLParser):
@@ -181,19 +195,38 @@ class DaumHTMLParser(MovieHTMLParser):
 		self.parseMode = 0
 
 if __name__ == '__main__':
-	# f = open("daum_%s.txt" % "레디 플레이어 원","w", encoding="UTF8")
-
-	# for review in getDaumMovieReview(96030):
-	# 	f.write(review+"\n")
-	# f.close()
+	import getopt
+	import sys
+	optlist, args = getopt.getopt(sys.argv[1:], "la")
+	# print(optlist)
+	ld = False
+	both = False
+	for o, a in optlist:
+		if o == "-l":
+			ld = True
+		if o == "-a":
+			ld = False
+			both = True
 	codes = open("naver_moviecode", "r", encoding="UTF8")
+
 	for line in codes.readlines():
 		if line.startswith("#"): continue
 		movie_name, movie_code = line.strip().split(",")
 		print()
 		print(movie_name)
-		f = open("naver_%s.txt" % movie_name, "w", encoding="UTF8")
-		for review in getNaverMovieReview(int(movie_code), False, print_page=True):
+		fn = "naver_%s" % movie_name
+		if ld: fn += "_long"
+		f = open("%s.txt" % fn, "w", encoding="UTF8")
+		for review in getNaverMovieReview(int(movie_code), ld, print_page=True):
 			f.write(review+"\n")
+			if ld: f.write("---------------------------------\n")
 		f.close()
+		if both:
+			f2 = open("naver_%s_long.txt" % movie_name, "W", encoding="UTF8")
+			for review in getNaverMovieReview(int(movie_code), True, print_page=True):
+				f2.write(review+"\n")
+				f2.write("---------------------------------\n")
+			f2.close()
+		
+
 	codes.close()
