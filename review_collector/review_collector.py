@@ -2,6 +2,9 @@ import urllib.request
 import http.client
 import html.parser
 import re
+
+reviewDivider = "------------div------------"
+
 def getMovieReview(slotted_url, movie_code, parser, end_function, print_page=False):
 	page_count = 1
 	last = []
@@ -11,6 +14,7 @@ def getMovieReview(slotted_url, movie_code, parser, end_function, print_page=Fal
 		if print_page: print("\r%d" % page_count, flush=True, end="")
 		
 		if data.status != 200:
+			print(data.status)
 			break
 		page = parser.getReview(data.read().decode("utf8"))
 		if end_function(page, last):
@@ -40,44 +44,25 @@ def getNaverMovieReview(movie_code, longdata=False, print_page=False):
 		url = long_url
 		parser = NaverLongMovieListParser(movie_code)
 	return getMovieReview(url, movie_code, parser, default_end_function, print_page)
-		
-	# page_count = 1
-	# last = []
-	# while True:
-	# 	url = "https://movie.naver.com/movie/bi/mi/pointWriteFormList.nhn?code=%d&type=after&isActualPointWriteExecute=false&isMileageSubscriptionAlready=false&isMileageSubscriptionReject=false&page=%d" % (movie_code, page_count)
-	# 	longurl = "https://movie.naver.com/movie/bi/mi/review.nhn?code=%d&order=newest&page=%d" % (movie_code, page_count)
-	# 	data = urllib.request.urlopen(url)
-	# 	print("\r%d" % page_count, flush=True, end="")
-	# 	if data.status != 200:
-	# 		break
-	# 	n = NaverHTMLParser()
-	# 	page = n.getReview(data.read().decode("utf8"))
-	# 	if len(last) > 0 and last == page: break
-	# 	if len(page) == 0: break
-	# 	for item in page:
-	# 		if len(item) == 0: continue
-	# 		yield item
-	# 	page_count += 1
-	# 	last = page
 
-def getDaumMovieReview(movie_code):
-	page_count = 1
-	last = []
-	while True:
-		url = "http://movie.daum.net/moviedb/grade?movieId=%d&type=netizen&page=%d" % (movie_code, page_count)
-		data = urllib.request.urlopen(url)
-		print("\r%d" % page_count, flush=True, end="")
-		if data.status != 200:
-			break
-		n = DaumHTMLParser()
-		page = n.getReview(data.read().decode("utf8"))
-		if len(last) > 0 and last == page: break
-		if len(page) == 0: break
-		for item in page:
-			if len(item) == 0: continue
-			yield item
-		page_count += 1
-		last = page
+# def getDaumMovieReview(movie_code):
+# 	page_count = 1
+# 	last = []
+# 	while True:
+# 		url = "http://movie.daum.net/moviedb/grade?movieId=%d&type=netizen&page=%d" % (movie_code, page_count)
+# 		data = urllib.request.urlopen(url)
+# 		print("\r%d" % page_count, flush=True, end="")
+# 		if data.status != 200:
+# 			break
+# 		n = DaumHTMLParser()
+# 		page = n.getReview(data.read().decode("utf8"))
+# 		if len(last) > 0 and last == page: break
+# 		if len(page) == 0: break
+# 		for item in page:
+# 			if len(item) == 0: continue
+# 			yield item
+# 		page_count += 1
+# 		last = page
 	
 
 class MovieHTMLParser(html.parser.HTMLParser):
@@ -128,6 +113,7 @@ class NaverLongMovieListParser(MovieHTMLParser):
 		self.reviewLinkCodes = set()
 		self.feed(html)
 		p = NaverLongReviewParser()
+		# print(self.reviewLinkCodes)
 		for item in self.reviewLinkCodes:
 			url = "https://movie.naver.com/movie/bi/mi/reviewread.nhn?nid=%d&code=%d&order=#tab" % (item, self.movie_code)
 			data = urllib.request.urlopen(url).read().decode("utf8")
@@ -155,7 +141,7 @@ class NaverLongMovieListParser(MovieHTMLParser):
 class NaverLongReviewParser(MovieHTMLParser):
 	def getReview(self, html):
 		self.review = []
-		# print(html)
+		self.reviewParts = []
 		self.feed(html)
 		r = "\n".join(self.review)
 		# print(r)
@@ -163,17 +149,19 @@ class NaverLongReviewParser(MovieHTMLParser):
 	def handle_starttag(self, tag, attrs):
 		if tag == "div" and ("class", "user_tx_area") in attrs:
 			self.parseMode = 1
+		if tag == "div" and (("class", "from_blog") in attrs or ("class", "cbox_module") in attrs):
+			self.parseMode = 0
 		if self.parseMode == 1 and tag == "p":
 			self.parseMode = 10
+		if len(self.reviewParts) > 0 and tag == "p":
+			self.review.append("".join(self.reviewParts))
+			self.reviewParts = []
+
 	def handle_data(self, data):
 		if self.parseMode == 10:
 			d = self.postprocess(data)
-			# print(len(d))
 			if len(d) > 1:
-				self.review.append(d)
-	def handle_endtag(self, tag):
-		if tag == "div":
-			self.parseMode = 0
+				self.reviewParts.append(d)
 
 	def postprocess(self, reviewText):
 		d = reviewText
@@ -219,14 +207,12 @@ if __name__ == '__main__':
 		f = open("%s.txt" % fn, "w", encoding="UTF8")
 		for review in getNaverMovieReview(int(movie_code), ld, print_page=True):
 			f.write(review+"\n")
-			if ld: f.write("---------------------------------\n")
+			if ld: f.write("%s\n" % reviewDivider)
 		f.close()
 		if both:
 			f2 = open("naver_%s_long.txt" % movie_name, "W", encoding="UTF8")
 			for review in getNaverMovieReview(int(movie_code), True, print_page=True):
 				f2.write(review+"\n")
-				f2.write("---------------------------------\n")
+				f2.write("%s\n" % reviewDivider)
 			f2.close()
-		
-
 	codes.close()
