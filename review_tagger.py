@@ -4,6 +4,14 @@ import signal
 import msvcrt
 import sys
 
+# 사용법: python review_tagger.py [영화제목]
+# 영화 리뷰 파일들은 [영화제목] 폴더 안에 있어야 함 -> movie.tgz 파일 압축 해제하면 나오는 디폴트 구조를 사용하면 됨.
+# review_tagger.py
+# [영화제목]/[번호]_[영화제목]_long.txt
+# 처음 전체 리뷰가 나오고 skip할 것이냐고 물어봄 -> y/n/q 로 대답
+# n 입력시 각각의 문장마다 y/n/q로 스포일러 존재 여부 태깅
+# q는 즉시종료
+
 sentenceCount = 0
 parsed = []
 
@@ -15,8 +23,9 @@ def signal_handler(signal, frame):
 		out.write("%s\n" % item)
 	out.close()
 
-def writeSpoiler(movie_dir, movie_name):
+def writeSpoiler(movie_dir):
 	global sentenceCount
+	movie_name = movie_dir
 	s = len([name for name in os.listdir(".\\%s" % movie_dir)])
 	# print(s)
 	try:
@@ -66,7 +75,8 @@ def checkReview(review):
 		elif skipInput.lower() == b'n':
 			print("---------------")
 			return "\n".join([tag(x) for x in review])
-
+		elif skipInput.lower() == b'q':
+			sys.exit(1)
 
 
 
@@ -83,4 +93,5 @@ def tag(sentence):
 
 
 if __name__ == '__main__':
-	writeSpoiler("신과함께", "신과함께")
+
+	writeSpoiler(sys.argv[1])
